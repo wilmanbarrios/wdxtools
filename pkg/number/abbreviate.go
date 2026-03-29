@@ -5,10 +5,7 @@
 // Laravel is created by Taylor Otwell and licensed under the MIT License.
 package number
 
-import (
-	"math"
-	"strings"
-)
+// No external imports needed — math.Log10/Pow replaced with tables and comparisons.
 
 // Option configures the behavior of Abbreviate and ForHumans.
 type Option func(*config)
@@ -43,23 +40,9 @@ func WithMaxPrecision(p int) Option {
 // Pre-computed powers of 10 for common magnitudes.
 var powers = [6]float64{1, 1e3, 1e6, 1e9, 1e12, 1e15}
 
-// Suffix map for abbreviated form.
-var shortSuffixes = map[int]string{
-	3:  "K",
-	6:  "M",
-	9:  "B",
-	12: "T",
-	15: "Q",
-}
-
-// Long suffix map for human-readable form.
-var longSuffixes = map[int]string{
-	3:  " thousand",
-	6:  " million",
-	9:  " billion",
-	12: " trillion",
-	15: " quadrillion",
-}
+// Suffix arrays indexed by displayExponent/3 for O(1) lookup (no map hashing).
+var shortSuffixes = [6]string{"", "K", "M", "B", "T", "Q"}
+var longSuffixes = [6]string{"", " thousand", " million", " billion", " trillion", " quadrillion"}
 
 // Abbreviate formats a number into a short human-readable string.
 // Examples: 1000 → "1K", 1500000 → "2M", 489939 with MaxPrecision(2) → "489.94K"
@@ -68,7 +51,10 @@ func Abbreviate(number float64, opts ...Option) string {
 	for _, o := range opts {
 		o(&cfg)
 	}
-	return summarize(number, cfg.precision, cfg.maxPrecision, shortSuffixes)
+	if number < 0 {
+		return "-" + summarize(-number, cfg.precision, cfg.maxPrecision, &shortSuffixes)
+	}
+	return summarize(number, cfg.precision, cfg.maxPrecision, &shortSuffixes)
 }
 
 // ForHumans formats a number into a long human-readable string.
@@ -78,42 +64,41 @@ func ForHumans(number float64, opts ...Option) string {
 	for _, o := range opts {
 		o(&cfg)
 	}
-	return summarize(number, cfg.precision, cfg.maxPrecision, longSuffixes)
+	if number < 0 {
+		return "-" + summarize(-number, cfg.precision, cfg.maxPrecision, &longSuffixes)
+	}
+	return summarize(number, cfg.precision, cfg.maxPrecision, &longSuffixes)
 }
 
 // summarize is the core formatting logic, ported from Laravel's Number::summarize().
-func summarize(number float64, precision, maxPrecision int, units map[int]string) string {
+// Uses comparison-based exponent detection (no math.Log10) and pre-computed power
+// table (no math.Pow) for maximum throughput.
+func summarize(number float64, precision, maxPrecision int, units *[6]string) string {
 	if number == 0.0 {
 		return formatNumber(0, precision, maxPrecision)
 	}
 
-	if number < 0 {
-		var b strings.Builder
-		b.WriteByte('-')
-		b.WriteString(summarize(-number, precision, maxPrecision, units))
-		return b.String()
-	}
-
-	// For numbers >= 1Q (1e15), recurse: divide by 1e15 and append "Q"
+	// For numbers >= 1Q (1e15), recurse once: divide by 1e15 and append quadrillion suffix.
 	if number >= 1e15 {
-		var b strings.Builder
-		b.WriteString(summarize(number/1e15, precision, maxPrecision, units))
-		b.WriteString(units[15])
-		return b.String()
+		return summarize(number/1e15, precision, maxPrecision, units) + units[5]
 	}
 
-	exponent := int(math.Floor(math.Log10(number)))
-	displayExponent := exponent - (exponent % 3)
-
-	if displayExponent > 0 {
-		value := number / math.Pow(10, float64(displayExponent))
-		suffix := units[displayExponent]
-
-		var b strings.Builder
-		b.WriteString(formatNumber(value, precision, maxPrecision))
-		b.WriteString(suffix)
-		return b.String()
+	// Determine display exponent via comparisons instead of math.Log10+math.Floor.
+	// At most 4 float comparisons (single UCOMISD instructions), exact at IEEE 754 boundaries.
+	var displayExponent int
+	switch {
+	case number >= 1e12:
+		displayExponent = 12
+	case number >= 1e9:
+		displayExponent = 9
+	case number >= 1e6:
+		displayExponent = 6
+	case number >= 1e3:
+		displayExponent = 3
+	default:
+		return formatNumber(number, precision, maxPrecision)
 	}
 
-	return formatNumber(number, precision, maxPrecision)
+	value := number / powers[displayExponent/3]
+	return formatNumber(value, precision, maxPrecision) + units[displayExponent/3]
 }

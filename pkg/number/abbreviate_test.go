@@ -139,6 +139,30 @@ func BenchmarkForHumans(b *testing.B) {
 	}
 }
 
+func BenchmarkAbbreviateSmall(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		Abbreviate(42)
+	}
+}
+
+func BenchmarkAbbreviateNegative(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		Abbreviate(-489939, WithMaxPrecision(2))
+	}
+}
+
+func BenchmarkFormatWithPrecision(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		formatNumber(489.939, 2, -1)
+	}
+}
+
+func BenchmarkFormatWithMaxPrecision(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		formatNumber(489.939, 0, 2)
+	}
+}
+
 func FuzzAbbreviate(f *testing.F) {
 	f.Add(0.0)
 	f.Add(1.0)

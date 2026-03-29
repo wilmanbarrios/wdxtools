@@ -9,6 +9,7 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -47,15 +48,19 @@ func main() {
 		fn = number.ForHumans
 	}
 
+	w := bufio.NewWriter(os.Stdout)
+
 	args := flag.Args()
 	if len(args) > 0 {
 		// Process arguments
 		for _, arg := range args {
-			if err := processInput(arg, fn, opts); err != nil {
+			if err := processInput(w, arg, fn, opts); err != nil {
+				w.Flush()
 				fmt.Fprintf(os.Stderr, "numcrn: %v\n", err)
 				os.Exit(1)
 			}
 		}
+		w.Flush()
 		return
 	}
 
@@ -68,15 +73,18 @@ func main() {
 			if line == "" {
 				continue
 			}
-			if err := processInput(line, fn, opts); err != nil {
+			if err := processInput(w, line, fn, opts); err != nil {
+				w.Flush()
 				fmt.Fprintf(os.Stderr, "numcrn: %v\n", err)
 				os.Exit(1)
 			}
 		}
 		if err := scanner.Err(); err != nil {
+			w.Flush()
 			fmt.Fprintf(os.Stderr, "numcrn: reading stdin: %v\n", err)
 			os.Exit(1)
 		}
+		w.Flush()
 		return
 	}
 
@@ -84,11 +92,13 @@ func main() {
 	os.Exit(1)
 }
 
-func processInput(input string, fn func(float64, ...number.Option) string, opts []number.Option) error {
+func processInput(w io.Writer, input string, fn func(float64, ...number.Option) string, opts []number.Option) error {
 	n, err := strconv.ParseFloat(strings.TrimSpace(input), 64)
 	if err != nil {
 		return fmt.Errorf("invalid number: %q", input)
 	}
-	fmt.Println(fn(n, opts...))
+	result := fn(n, opts...)
+	io.WriteString(w, result)
+	io.WriteString(w, "\n")
 	return nil
 }
