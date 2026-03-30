@@ -3,7 +3,7 @@
 [![CI](https://github.com/wilmanbarrios/wdxtools/actions/workflows/ci.yml/badge.svg)](https://github.com/wilmanbarrios/wdxtools/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Personal CLI utilities written in Go. Ports of useful tools found online that lack binary distributions. Zero dependencies, static binaries, performance first.
+Everyday formatting tools for the command line. Lightning-fast Go ports of popular library functions that deserve their own binary.
 
 ## Utilities
 

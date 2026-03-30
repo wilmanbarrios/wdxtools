@@ -1,6 +1,6 @@
 # wdxtools
 
-Personal CLI utilities written in Go. Ports of useful tools found online that lack binary distributions.
+Everyday formatting tools for the command line. Lightning-fast Go ports of popular library functions that deserve their own binary.
 
 ## Project principles
 - Performance first: use strconv over fmt, pre-computed tables, minimize allocations
