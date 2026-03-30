@@ -27,7 +27,13 @@ var dateFormats = []string{
 	"2006-01-02",
 }
 
+// version is set at build time via -ldflags.
+var version = "dev"
+
 func main() {
+	versionFlag := flag.Bool("v", false, "print version and exit")
+	flag.BoolVar(versionFlag, "version", false, "print version and exit")
+
 	short := flag.Bool("s", false, "use short form (2h, 3d, ...)")
 	flag.BoolVar(short, "short", false, "use short form (2h, 3d, ...)")
 
@@ -59,6 +65,11 @@ func main() {
 	}
 
 	flag.Parse()
+
+	if *versionFlag {
+		fmt.Println("diffh " + version)
+		return
+	}
 
 	// Build options.
 	var opts []timediff.Option

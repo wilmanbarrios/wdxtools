@@ -17,7 +17,13 @@ import (
 	"github.com/wilmanbarrios/wdxtools/pkg/number"
 )
 
+// version is set at build time via -ldflags.
+var version = "dev"
+
 func main() {
+	versionFlag := flag.Bool("v", false, "print version and exit")
+	flag.BoolVar(versionFlag, "version", false, "print version and exit")
+
 	precision := flag.Int("p", 0, "minimum decimal places (precision)")
 	flag.IntVar(precision, "precision", 0, "minimum decimal places (precision)")
 
@@ -34,6 +40,11 @@ func main() {
 	}
 
 	flag.Parse()
+
+	if *versionFlag {
+		fmt.Println("numcrn " + version)
+		return
+	}
 
 	var opts []number.Option
 	if *precision != 0 {
