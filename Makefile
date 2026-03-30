@@ -1,4 +1,4 @@
-.PHONY: build test bench clean
+.PHONY: build test bench bench-php clean
 
 build:
 	@mkdir -p bin
@@ -14,6 +14,10 @@ test:
 
 bench:
 	docker build --target bencher -t wdxtools-bencher .
+
+bench-php:
+	docker build -t wdxtools-php-bench bench/php/
+	docker run --rm wdxtools-php-bench
 
 clean:
 	rm -rf bin/

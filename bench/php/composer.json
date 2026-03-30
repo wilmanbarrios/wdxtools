@@ -1,0 +1,6 @@
+{
+    "require": {
+        "illuminate/support": "^12.0",
+        "nesbot/carbon": "^3.0"
+    }
+}

@@ -3,24 +3,30 @@
 [![CI](https://github.com/wilmanbarrios/wdxtools/actions/workflows/ci.yml/badge.svg)](https://github.com/wilmanbarrios/wdxtools/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Personal CLI utilities written in Go. Ports of useful tools found online that lack binary distributions.
+Personal CLI utilities written in Go. Ports of useful tools found online that lack binary distributions. Zero dependencies, static binaries, performance first.
 
 ## Utilities
 
-### numcrn
+| Tool | Description | Ported from |
+|------|-------------|-------------|
+| [`numcrn`](#numcrn) | Abbreviate numbers for humans | Laravel `Number::abbreviate()` |
+| [`diffh`](#diffh) | Human-readable time differences | Carbon `diffForHumans()` |
+
+---
+
+## numcrn
 
 Abbreviate numbers for humans. Port of [Laravel's `Number::abbreviate()`](https://github.com/laravel/framework/blob/12.x/src/Illuminate/Support/Number.php) with 100% feature parity.
 
-```
-numcrn [flags] <number>
+### Install
 
-Flags:
-  -p, --precision int        minimum decimal places (default 0)
-  -m, --max-precision int    maximum decimal places (default: unset)
-  -l, --long                 use long form (thousand, million, ...)
+```bash
+brew install wilmanbarrios/wdxtools/numcrn
+# or
+go install github.com/wilmanbarrios/wdxtools/cmd/numcrn@latest
 ```
 
-**Examples:**
+### Examples
 
 ```bash
 numcrn 489939              # 490K
@@ -31,25 +37,39 @@ echo -1000 | numcrn        # -1K
 numcrn 1000000000000000000 # 1KQ
 ```
 
-### diffh
+Run `numcrn --help` for all flags.
+
+### Original vs wdxtools
+
+| | Laravel (PHP 8.3) | wdxtools (Go) | Speedup |
+|---|---|---|---|
+| `Abbreviate(489939)` | 13,603 ns/op | 201 ns/op | **68x** |
+| `Abbreviate(1e18)` | 9,616 ns/op | 59 ns/op | **163x** |
+| `ForHumans(489939)` | 13,021 ns/op | 203 ns/op | **64x** |
+| `Abbreviate(42)` | 9,664 ns/op | 17 ns/op | **568x** |
+
+| | Original (PHP) | wdxtools (Go) |
+|---|---|---|
+| Runtime | PHP 8.x + Laravel | Static binary |
+| Install | `composer require laravel/framework` | `brew install` / single binary |
+| Dependencies | Laravel + intl extension | None (stdlib only) |
+| Pipe support | No | Yes (`echo 1000 \| numcrn`) |
+
+---
+
+## diffh
 
 Human-readable time differences. Port of [Carbon's `diffForHumans()`](https://github.com/briannesbitt/Carbon/blob/master/src/Carbon/Traits/Difference.php) with 100% feature parity.
 
-```
-diffh [flags] <date> [other-date]
+### Install
 
-Flags:
-  -s, --short         use short form (2h, 3d, ...)
-  -a, --absolute      no temporal modifier (no ago/from now)
-  -p, --parts int     time units to show (default 1, max 7)
-  -j, --just-now      show "just now" for zero diffs
-  -1, --one-day       use yesterday/tomorrow for 1-day diffs
-  -2, --two-day       use "before yesterday"/"after tomorrow"
-  -S, --sequential    only show sequential non-zero units
-  -n, --no-zero       show "1 second" instead of "0 seconds"
+```bash
+brew install wilmanbarrios/wdxtools/diffh
+# or
+go install github.com/wilmanbarrios/wdxtools/cmd/diffh@latest
 ```
 
-**Examples:**
+### Examples
 
 ```bash
 diffh 2024-01-15                    # 1 year ago
@@ -60,37 +80,61 @@ diffh 1774820647                    # 4 hours ago (unix timestamp)
 echo 2024-01-15 | diffh            # 1 year ago
 ```
 
-## Installation
+Run `diffh --help` for all flags.
 
-### Homebrew
+### Original vs wdxtools
+
+| | Carbon (PHP 8.3) | wdxtools (Go) | Speedup |
+|---|---|---|---|
+| `diffForHumans()` | 27,685 ns/op | 167 ns/op | **166x** |
+| `diffForHumans(parts: 3)` | 37,653 ns/op | 199 ns/op | **189x** |
+| `diffForHumans(short)` | 27,798 ns/op | 168 ns/op | **165x** |
+
+| | Original (PHP) | wdxtools (Go) |
+|---|---|---|
+| Runtime | PHP 8.x + Carbon | Static binary |
+| Install | `composer require nesbot/carbon` | `brew install` / single binary |
+| Dependencies | Carbon + intl extension | None (stdlib only) |
+| Unix timestamps | No | Yes (`diffh 1774820647`) |
+| Pipe support | No | Yes (`echo date \| diffh`) |
+
+---
+
+## Benchmark methodology
+
+All benchmarks run inside Docker containers on the same host to ensure a fair comparison. No emulation — both containers run natively on arm64.
+
+| | PHP container | Go container |
+|---|---|---|
+| Base image | `php:8.3-cli-alpine` | `golang:1.24-alpine` |
+| Runtime | PHP 8.3.30 (NTS) | Go 1.24.13 |
+| Optimization | OPcache + JIT (tracing mode) | `CGO_ENABLED=0 -ldflags="-s -w"` |
+| Architecture | linux/arm64 (native) | linux/arm64 (native) |
+
+**Host:** Apple M2, 8 cores, 16 GB RAM, Docker Desktop 29.2.0 (8 CPUs / 8 GB allocated).
+
+PHP runs with its best performance mode: OPcache enabled and JIT in tracing mode. Go binaries are statically compiled with no CGo. Both containers have access to all 8 cores and the full memory allocation.
+
+Reproduce locally: `make bench` (Go) and `make bench-php` (PHP).
+
+---
+
+## Build from source
+
+All builds run via Docker — no Go toolchain required on host.
 
 ```bash
-brew install wilmanbarrios/wdxtools/numcrn
-brew install wilmanbarrios/wdxtools/diffh
-```
-
-### GitHub Releases
-
-Download the latest binary from [Releases](https://github.com/wilmanbarrios/wdxtools/releases).
-
-### Go install
-
-```bash
-go install github.com/wilmanbarrios/wdxtools/cmd/numcrn@latest
-go install github.com/wilmanbarrios/wdxtools/cmd/diffh@latest
-```
-
-### Build from source (Docker)
-
-```bash
-make build
-./bin/numcrn 489939
+make build        # builds all binaries to ./bin/
+make test         # runs all tests
+make bench        # runs benchmarks
 ```
 
 ## Credits
 
-- **numcrn**: Port of [`Number::abbreviate()`](https://github.com/laravel/framework/blob/12.x/src/Illuminate/Support/Number.php) from [Laravel Framework](https://laravel.com) by [Taylor Otwell](https://github.com/taylorotwell), licensed under the [MIT License](https://github.com/laravel/framework/blob/12.x/LICENSE.md).
-- **diffh**: Port of [`diffForHumans()`](https://github.com/briannesbitt/Carbon/blob/master/src/Carbon/Traits/Difference.php) from [Carbon](https://carbon.nesbot.com) by [Brian Nesbitt](https://github.com/briannesbitt), licensed under the [MIT License](https://github.com/briannesbitt/Carbon/blob/master/LICENSE).
+| Tool | Original | Author | License |
+|------|----------|--------|---------|
+| `numcrn` | [`Number::abbreviate()`](https://github.com/laravel/framework/blob/12.x/src/Illuminate/Support/Number.php) | [Taylor Otwell](https://github.com/taylorotwell) (Laravel) | MIT |
+| `diffh` | [`diffForHumans()`](https://github.com/briannesbitt/Carbon/blob/master/src/Carbon/Traits/Difference.php) | [Brian Nesbitt](https://github.com/briannesbitt) (Carbon) | MIT |
 
 ## License
 

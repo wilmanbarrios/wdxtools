@@ -13,6 +13,10 @@ dist/
 # Output
 *.out
 
+# PHP benchmark vendor
+bench/php/vendor/
+bench/php/composer.lock
+
 # OS
 .DS_Store
 Thumbs.db
