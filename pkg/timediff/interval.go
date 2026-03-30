@@ -14,6 +14,10 @@ type Interval struct {
 	Invert  bool // true when "from" is after "to" (past direction)
 }
 
+// Pre-computed days per month (index 1-12). February defaults to 28;
+// leap years are handled by isLeapYear. Avoids time.Date allocation.
+var daysPerMonth = [13]int{0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
+
 // Diff computes the calendar interval between two times.
 // This replicates PHP DateInterval's behavior: each component is computed
 // via calendar arithmetic (not total-seconds conversion), so "Jan 1 to Feb 1"
@@ -27,10 +31,8 @@ func Diff(from, to time.Time) Interval {
 
 	y1, m1, d1 := from.Date()
 	y2, m2, d2 := to.Date()
-	h1, _, s1 := from.Clock()
-	h2, _, s2 := to.Clock()
-	_, min1, _ := from.Clock()
-	_, min2, _ := to.Clock()
+	h1, min1, s1 := from.Clock()
+	h2, min2, s2 := to.Clock()
 
 	// Time components with borrowing.
 	seconds := s2 - s1
@@ -57,7 +59,7 @@ func Diff(from, to time.Time) Interval {
 			m2 = 12
 			y2--
 		}
-		d2 += daysInMonth(y2, m2)
+		d2 += daysIn(y2, m2)
 	}
 
 	// Month/year: total months between the two adjusted dates.
@@ -66,17 +68,15 @@ func Diff(from, to time.Time) Interval {
 	// Day remainder: d2 - d1, handling month-boundary clipping.
 	days := d2 - d1
 	if days < 0 {
-		// We overshot: back off one month and count remaining days.
 		totalMonths--
 
-		// Find the month we land in after totalMonths from (y1, m1).
 		prevM := m2 - 1
 		prevY := y2
 		if prevM <= 0 {
 			prevM = 12
 			prevY--
 		}
-		dim := daysInMonth(prevY, prevM)
+		dim := daysIn(prevY, prevM)
 
 		// Clip from's day to the max day of that month (PHP behavior).
 		clipped := d1
@@ -91,6 +91,11 @@ func Diff(from, to time.Time) Interval {
 	weeks := days / 7
 	days = days % 7
 
+	// Suppress unused warnings for h1, min1, s1.
+	_ = h1
+	_ = min1
+	_ = s1
+
 	return Interval{
 		Years:   years,
 		Months:  months,
@@ -103,12 +108,21 @@ func Diff(from, to time.Time) Interval {
 	}
 }
 
-// daysInMonth returns the number of days in the given month.
-func daysInMonth(year int, month time.Month) int {
-	return time.Date(year, month+1, 0, 0, 0, 0, 0, time.UTC).Day()
+// daysIn returns the number of days in the given month using a pre-computed
+// table. No time.Date allocation needed.
+func daysIn(year int, month time.Month) int {
+	if month == 2 && isLeapYear(year) {
+		return 29
+	}
+	return daysPerMonth[month]
 }
 
-// values returns the interval components as a slice aligned with Unit constants.
+// isLeapYear reports whether year is a leap year.
+func isLeapYear(year int) bool {
+	return year%4 == 0 && (year%100 != 0 || year%400 == 0)
+}
+
+// values returns the interval components as an array aligned with Unit constants.
 func (iv Interval) values() [7]int {
 	return [7]int{iv.Years, iv.Months, iv.Weeks, iv.Days, iv.Hours, iv.Minutes, iv.Seconds}
 }

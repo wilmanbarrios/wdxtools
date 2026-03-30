@@ -24,7 +24,6 @@ var unitTable = [7]unitInfo{
 }
 
 // Cascade factors: how many of unit[i+1] fit in one of unit[i].
-// Used when skipping a unit to cascade its value downward.
 // year→month=12, month→week=4, week→day=7, day→hour=24, hour→min=60, min→sec=60
 var cascadeFactors = [6]int{12, 4, 7, 24, 60, 60}
 
@@ -62,6 +61,8 @@ func DiffForHumans(from time.Time, opts ...Option) string {
 }
 
 // formatInterval is the core formatting engine (mirrors CarbonInterval::forHumans).
+// Builds the entire output string in a single stack-allocated byte buffer to
+// minimize heap allocations.
 func formatInterval(iv Interval, syntax Syntax, short bool, parts int, opts Options, skip []Unit) string {
 	absolute := syntax == SyntaxAbsolute
 	relativeToNow := syntax == SyntaxRelativeToNow
@@ -77,34 +78,35 @@ func formatInterval(iv Interval, syntax Syntax, short bool, parts int, opts Opti
 				vals[i] = 0
 			}
 		}
-		// If the last unit (second) is skipped, just zero it.
 		if skipped[len(vals)-1] {
 			vals[len(vals)-1] = 0
 		}
 	}
 
-	// Collect non-zero parts up to the limit.
+	// Collect non-zero parts into a stack-allocated array (max 7 parts).
 	type collected struct {
 		count int
-		unit  int // index into unitTable
+		unit  int
 	}
-	var result []collected
+	var result [7]collected
+	resultLen := 0
 	var lastUnit int
 
 	for i, v := range vals {
 		if v > 0 {
-			result = append(result, collected{v, i})
-		} else if opts&SequentialPartsOnly != 0 && len(result) > 0 {
+			result[resultLen] = collected{v, i}
+			resultLen++
+		} else if opts&SequentialPartsOnly != 0 && resultLen > 0 {
 			break
 		}
-		if len(result) >= parts {
+		if resultLen >= parts {
 			break
 		}
 		lastUnit = i
 	}
 
 	// Handle zero diff.
-	if len(result) == 0 {
+	if resultLen == 0 {
 		if relativeToNow && opts&JustNow != 0 {
 			return "just now"
 		}
@@ -116,11 +118,15 @@ func formatInterval(iv Interval, syntax Syntax, short bool, parts int, opts Opti
 		if opts&NoZeroDiff != 0 {
 			count = 1
 		}
-		return finalize([]string{formatUnit(count, fallbackUnit, short)}, iv.Invert, syntax, absolute, relativeToNow)
+		// Build: "{count} {unit}" + suffix in one buffer.
+		var buf [64]byte
+		b := appendUnit(buf[:0], count, fallbackUnit, short)
+		b = appendSuffix(b, iv.Invert, absolute, relativeToNow)
+		return string(b)
 	}
 
 	// Special day words (only for single-part day results).
-	if parts == 1 && len(result) == 1 && result[0].unit == int(UnitDay) && !absolute {
+	if parts == 1 && resultLen == 1 && result[0].unit == int(UnitDay) && !absolute {
 		if relativeToNow {
 			if result[0].count == 1 && opts&OneDayWords != 0 {
 				if !iv.Invert {
@@ -137,49 +143,60 @@ func formatInterval(iv Interval, syntax Syntax, short bool, parts int, opts Opti
 		}
 	}
 
-	// Format each collected part.
-	formatted := make([]string, len(result))
-	for i, c := range result {
-		formatted[i] = formatUnit(c.count, c.unit, short)
-	}
+	// Build the entire output in a single byte buffer:
+	// "{part1}, {part2}, and {partN} ago"
+	var buf [128]byte
+	b := buf[:0]
 
-	return finalize(formatted, iv.Invert, syntax, absolute, relativeToNow)
-}
-
-// finalize joins parts and applies temporal modifiers.
-func finalize(parts []string, invert bool, syntax Syntax, absolute, relativeToNow bool) string {
-	timeStr := joinParts(parts)
-
-	if absolute {
-		return timeStr
-	}
-
-	// Invert=true means from > to (from is in the future relative to to).
-	if relativeToNow {
-		if !invert {
-			return timeStr + " ago"
+	for i := 0; i < resultLen; i++ {
+		if i > 0 {
+			if i == resultLen-1 {
+				if resultLen == 2 {
+					b = append(b, " and "...)
+				} else {
+					b = append(b, ", and "...)
+				}
+			} else {
+				b = append(b, ", "...)
+			}
 		}
-		return timeStr + " from now"
+		b = appendUnit(b, result[i].count, result[i].unit, short)
 	}
 
-	// SyntaxRelativeToOther
-	if !invert {
-		return timeStr + " before"
-	}
-	return timeStr + " after"
+	b = appendSuffix(b, iv.Invert, absolute, relativeToNow)
+	return string(b)
 }
 
-// formatUnit formats a single count+unit pair.
-func formatUnit(count, unitIdx int, short bool) string {
+// appendUnit appends a formatted "{count}{unit}" or "{count} {unit}" to b.
+// Uses strconv.AppendInt to avoid Itoa allocation.
+func appendUnit(b []byte, count, unitIdx int, short bool) []byte {
+	b = strconv.AppendInt(b, int64(count), 10)
 	info := unitTable[unitIdx]
 	if short {
-		return strconv.Itoa(count) + info.short
+		return append(b, info.short...)
 	}
-	noun := info.plural
+	b = append(b, ' ')
 	if count == 1 {
-		noun = info.singular
+		return append(b, info.singular...)
 	}
-	return strconv.Itoa(count) + " " + noun
+	return append(b, info.plural...)
+}
+
+// appendSuffix appends the temporal modifier (" ago", " from now", etc.) to b.
+func appendSuffix(b []byte, invert, absolute, relativeToNow bool) []byte {
+	if absolute {
+		return b
+	}
+	if relativeToNow {
+		if !invert {
+			return append(b, " ago"...)
+		}
+		return append(b, " from now"...)
+	}
+	if !invert {
+		return append(b, " before"...)
+	}
+	return append(b, " after"...)
 }
 
 // joinParts joins formatted strings with Oxford comma style:
@@ -193,7 +210,6 @@ func joinParts(parts []string) string {
 	case 2:
 		return parts[0] + " and " + parts[1]
 	default:
-		// "X, Y, and Z"
 		var b []byte
 		for i, p := range parts {
 			if i > 0 {
@@ -207,6 +223,13 @@ func joinParts(parts []string) string {
 		}
 		return string(b)
 	}
+}
+
+// formatUnit formats a single count+unit pair. Used by tests.
+func formatUnit(count, unitIdx int, short bool) string {
+	var buf [20]byte
+	b := appendUnit(buf[:0], count, unitIdx, short)
+	return string(b)
 }
 
 // makeSkipSet converts a skip slice to a fixed-size boolean array for O(1) lookup.
