@@ -61,7 +61,7 @@ func main() {
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: diffh [flags] <date> [other-date]\n\nHuman-readable time differences.\n\nFlags:\n")
 		flag.PrintDefaults()
-		fmt.Fprintf(os.Stderr, "\nExamples:\n  diffh 2024-01-15              → 1 year ago\n  diffh -s 2024-01-15            → 1y ago\n  diffh -p 3 2024-01-15          → 1 year, 2 months, and 14 days ago\n  diffh -a 2024-01-15 2025-01-15 → 1 year\n  diffh 1774820647               → 4 hours ago (unix timestamp)\n  echo 2024-01-15 | diffh        → 1 year ago\n")
+		fmt.Fprintf(os.Stderr, "\nExamples:\n  diffh 2024-01-15              → 1 year ago\n  diffh -s 2024-01-15            → 1y ago\n  diffh -p 3 2024-01-15          → 1 year, 2 months, and 14 days ago\n  diffh -a 2024-01-15 2025-01-15 → 1 year\n  diffh 1774820647               → 4 hours ago (unix timestamp)\n  echo 2024-01-15 | diffh        → 1 year ago\n  printf '%%s\\n' ts1 ts2 | diffh  → one line per input (batch mode)\n")
 	}
 
 	flag.Parse()
