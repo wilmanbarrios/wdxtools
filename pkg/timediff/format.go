@@ -61,9 +61,17 @@ func DiffForHumans(from time.Time, opts ...Option) string {
 }
 
 // formatInterval is the core formatting engine (mirrors CarbonInterval::forHumans).
-// Builds the entire output string in a single stack-allocated byte buffer to
-// minimize heap allocations.
+// Uses a stack-allocated byte buffer to minimize heap allocations.
 func formatInterval(iv Interval, syntax Syntax, short bool, parts int, opts Options, skip []Unit) string {
+	var buf [128]byte
+	b := appendInterval(buf[:0], iv, syntax, short, parts, opts, skip)
+	return string(b)
+}
+
+// appendInterval appends the formatted interval to b and returns the extended
+// buffer. This is the allocation-free core used by both formatInterval and
+// Formatter.AppendFormat.
+func appendInterval(b []byte, iv Interval, syntax Syntax, short bool, parts int, opts Options, skip []Unit) []byte {
 	absolute := syntax == SyntaxAbsolute
 	relativeToNow := syntax == SyntaxRelativeToNow
 
@@ -106,17 +114,14 @@ func formatInterval(iv Interval, syntax Syntax, short bool, parts int, opts Opti
 	// Handle zero diff.
 	if resultLen == 0 {
 		if relativeToNow && opts&JustNow != 0 {
-			return "just now"
+			return append(b, "just now"...)
 		}
 		count := 0
 		if opts&NoZeroDiff != 0 {
 			count = 1
 		}
-		// Build: "{count} {unit}" + suffix in one buffer.
-		var buf [64]byte
-		b := appendUnit(buf[:0], count, int(UnitSecond), short)
-		b = appendSuffix(b, iv.Invert, absolute, relativeToNow)
-		return string(b)
+		b = appendUnit(b, count, int(UnitSecond), short)
+		return appendSuffix(b, iv.Invert, absolute, relativeToNow)
 	}
 
 	// Special day words (only for single-part day results).
@@ -124,24 +129,20 @@ func formatInterval(iv Interval, syntax Syntax, short bool, parts int, opts Opti
 		if relativeToNow {
 			if result[0].count == 1 && opts&OneDayWords != 0 {
 				if !iv.Invert {
-					return "yesterday"
+					return append(b, "yesterday"...)
 				}
-				return "tomorrow"
+				return append(b, "tomorrow"...)
 			}
 			if result[0].count == 2 && opts&TwoDayWords != 0 {
 				if !iv.Invert {
-					return "before yesterday"
+					return append(b, "before yesterday"...)
 				}
-				return "after tomorrow"
+				return append(b, "after tomorrow"...)
 			}
 		}
 	}
 
-	// Build the entire output in a single byte buffer:
-	// "{part1}, {part2}, and {partN} ago"
-	var buf [128]byte
-	b := buf[:0]
-
+	// Build: "{part1}, {part2}, and {partN} ago"
 	for i := 0; i < resultLen; i++ {
 		if i > 0 {
 			if i == resultLen-1 {
@@ -157,8 +158,7 @@ func formatInterval(iv Interval, syntax Syntax, short bool, parts int, opts Opti
 		b = appendUnit(b, result[i].count, result[i].unit, short)
 	}
 
-	b = appendSuffix(b, iv.Invert, absolute, relativeToNow)
-	return string(b)
+	return appendSuffix(b, iv.Invert, absolute, relativeToNow)
 }
 
 // appendUnit appends a formatted "{count}{unit}" or "{count} {unit}" to b.

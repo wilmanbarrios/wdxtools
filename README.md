@@ -78,6 +78,11 @@ diffh -p 3 2024-01-15              # 1 year, 2 months, and 14 days ago
 diffh -a 2024-01-15 2025-01-15     # 1 year
 diffh 1774820647                    # 4 hours ago (unix timestamp)
 echo 2024-01-15 | diffh            # 1 year ago
+
+# Batch mode with templates (-f)
+printf '%s\n' ts1 ts2 | diffh               # one line per input
+cat log.csv | diffh -f '$2 ($d)'            # $1..$N=fields, $d=diff
+cat events.tsv | diffh -f '$1\t$2\t$d'      # tab-separated output
 ```
 
 Run `diffh --help` for all flags.

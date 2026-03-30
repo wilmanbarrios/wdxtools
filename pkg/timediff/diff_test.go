@@ -302,6 +302,57 @@ func TestAppendUnit(t *testing.T) {
 	}
 }
 
+// Formatter tests
+
+func TestFormatter(t *testing.T) {
+	now := fixed(2025, 3, 29, 12, 0, 0)
+
+	tests := []struct {
+		name     string
+		from     time.Time
+		opts     []Option
+		expected string
+	}{
+		{"1 hour ago", fixed(2025, 3, 29, 11, 0, 0), nil, "1 hour ago"},
+		{"1 day ago", fixed(2025, 3, 28, 12, 0, 0), nil, "1 day ago"},
+		{"just now", now, []Option{WithOptions(JustNow)}, "just now"},
+		{"short", fixed(2025, 3, 29, 10, 0, 0), []Option{WithShort(true)}, "2h ago"},
+		{"multi-part", fixed(2025, 3, 29, 9, 30, 0), []Option{WithParts(2)}, "2 hours and 30 minutes ago"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := append([]Option{withNowOverride(now)}, tt.opts...)
+			f := NewFormatter(opts...)
+			got := f.Format(tt.from)
+			if got != tt.expected {
+				t.Errorf("Formatter.Format() = %q, want %q", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestFormatterAppendFormat(t *testing.T) {
+	now := fixed(2025, 3, 29, 12, 0, 0)
+	f := NewFormatter(withNowOverride(now))
+
+	var buf [128]byte
+	b := f.AppendFormat(buf[:0], fixed(2025, 3, 29, 11, 0, 0))
+
+	got := string(b)
+	if got != "1 hour ago" {
+		t.Errorf("AppendFormat() = %q, want %q", got, "1 hour ago")
+	}
+
+	// Verify it actually appends to existing content.
+	prefix := []byte("prefix: ")
+	b = f.AppendFormat(prefix, fixed(2025, 3, 28, 12, 0, 0))
+	got = string(b)
+	if got != "prefix: 1 day ago" {
+		t.Errorf("AppendFormat(prefix) = %q, want %q", got, "prefix: 1 day ago")
+	}
+}
+
 // Benchmarks
 
 func BenchmarkDiffForHumans(b *testing.B) {
@@ -333,6 +384,27 @@ func BenchmarkDiffInterval(b *testing.B) {
 	to := fixed(2025, 3, 29, 12, 0, 0)
 	for i := 0; i < b.N; i++ {
 		Diff(from, to)
+	}
+}
+
+func BenchmarkFormatter(b *testing.B) {
+	from := fixed(2024, 6, 15, 10, 30, 0)
+	now := fixed(2025, 3, 29, 12, 0, 0)
+	f := NewFormatter(withNowOverride(now))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		f.Format(from)
+	}
+}
+
+func BenchmarkFormatterAppend(b *testing.B) {
+	from := fixed(2024, 6, 15, 10, 30, 0)
+	now := fixed(2025, 3, 29, 12, 0, 0)
+	f := NewFormatter(withNowOverride(now))
+	var buf [128]byte
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		f.AppendFormat(buf[:0], from)
 	}
 }
 

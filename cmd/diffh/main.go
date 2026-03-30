@@ -7,6 +7,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"flag"
 	"fmt"
 	"io"
@@ -58,10 +59,13 @@ func main() {
 	noZero := flag.Bool("n", false, "show \"1 second\" instead of \"0 seconds\"")
 	flag.BoolVar(noZero, "no-zero", false, "show \"1 second\" instead of \"0 seconds\"")
 
+	formatTpl := flag.String("f", "", "output template for batch mode ($1..$N=fields, $d=diff)")
+	flag.StringVar(formatTpl, "format", "", "output template for batch mode ($1..$N=fields, $d=diff)")
+
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: diffh [flags] <date> [other-date]\n\nHuman-readable time differences.\n\nFlags:\n")
 		flag.PrintDefaults()
-		fmt.Fprintf(os.Stderr, "\nExamples:\n  diffh 2024-01-15              → 1 year ago\n  diffh -s 2024-01-15            → 1y ago\n  diffh -p 3 2024-01-15          → 1 year, 2 months, and 14 days ago\n  diffh -a 2024-01-15 2025-01-15 → 1 year\n  diffh 1774820647               → 4 hours ago (unix timestamp)\n  echo 2024-01-15 | diffh        → 1 year ago\n  printf '%%s\\n' ts1 ts2 | diffh  → one line per input (batch mode)\n")
+		fmt.Fprintf(os.Stderr, "\nExamples:\n  diffh 2024-01-15              → 1 year ago\n  diffh -s 2024-01-15            → 1y ago\n  diffh -p 3 2024-01-15          → 1 year, 2 months, and 14 days ago\n  diffh -a 2024-01-15 2025-01-15 → 1 year\n  diffh 1774820647               → 4 hours ago (unix timestamp)\n  echo 2024-01-15 | diffh        → 1 year ago\n  printf '%%s\\n' ts1 ts2 | diffh  → one line per input (batch mode)\n\nTemplate mode (-f): $1..$N = input fields, $d = time diff\n  ... | diffh -f '$2 ($d)'       → second field + diff in parens\n  ... | diffh -f '$1\\t$d'        → first field + tab + diff\n  ... | diffh -f '$d — $1 $2'    → diff followed by two fields\n")
 	}
 
 	flag.Parse()
@@ -134,22 +138,47 @@ func main() {
 	// Check stdin.
 	stat, _ := os.Stdin.Stat()
 	if (stat.Mode() & os.ModeCharDevice) == 0 {
+		f := timediff.NewFormatter(opts...)
+		var buf [128]byte
 		scanner := bufio.NewScanner(os.Stdin)
-		for scanner.Scan() {
-			line := strings.TrimSpace(scanner.Text())
-			if line == "" {
-				continue
+
+		if *formatTpl != "" {
+			tpl := unescapeTemplate(*formatTpl)
+			var tplBuf [256]byte
+			for scanner.Scan() {
+				fields := bytes.Fields(scanner.Bytes())
+				if len(fields) == 0 {
+					continue
+				}
+				from, err := parseDateBytes(fields[0])
+				if err != nil {
+					w.Flush()
+					fmt.Fprintf(os.Stderr, "diffh: %v\n", err)
+					os.Exit(1)
+				}
+				diff := f.AppendFormat(buf[:0], from)
+				out := expandTemplate(tplBuf[:0], tpl, fields, diff)
+				w.Write(out)
+				w.WriteByte('\n')
 			}
-			from, err := parseDate(line)
-			if err != nil {
-				w.Flush()
-				fmt.Fprintf(os.Stderr, "diffh: %v\n", err)
-				os.Exit(1)
+		} else {
+			for scanner.Scan() {
+				line := bytes.TrimSpace(scanner.Bytes())
+				if len(line) == 0 {
+					continue
+				}
+				from, err := parseDateBytes(line)
+				if err != nil {
+					w.Flush()
+					fmt.Fprintf(os.Stderr, "diffh: %v\n", err)
+					os.Exit(1)
+				}
+				b := f.AppendFormat(buf[:0], from)
+				b = append(b, '\n')
+				w.Write(b)
 			}
-			result := timediff.DiffForHumans(from, opts...)
-			io.WriteString(w, result)
-			io.WriteString(w, "\n")
 		}
+
 		if err := scanner.Err(); err != nil {
 			w.Flush()
 			fmt.Fprintf(os.Stderr, "diffh: reading stdin: %v\n", err)
@@ -161,6 +190,42 @@ func main() {
 
 	flag.Usage()
 	os.Exit(1)
+}
+
+// parseDateBytes tries to interpret b as a date/time without string allocation
+// for the common case of Unix timestamps (pure integers).
+func parseDateBytes(b []byte) (time.Time, error) {
+	if ts, ok := parseIntBytes(b); ok {
+		return time.Unix(ts, 0), nil
+	}
+	return parseDate(string(b))
+}
+
+// parseIntBytes parses a decimal integer from b without allocating a string.
+func parseIntBytes(b []byte) (int64, bool) {
+	if len(b) == 0 {
+		return 0, false
+	}
+	neg := b[0] == '-'
+	i := 0
+	if neg || b[0] == '+' {
+		i = 1
+	}
+	if i >= len(b) {
+		return 0, false
+	}
+	var n int64
+	for ; i < len(b); i++ {
+		c := b[i] - '0'
+		if c > 9 {
+			return 0, false
+		}
+		n = n*10 + int64(c)
+	}
+	if neg {
+		n = -n
+	}
+	return n, true
 }
 
 // parseDate tries to interpret s as a date/time. It checks for Unix timestamps
@@ -181,4 +246,46 @@ func parseDate(s string) (time.Time, error) {
 	}
 
 	return time.Time{}, fmt.Errorf("invalid date: %q", s)
+}
+
+// expandTemplate replaces $d with the formatted diff, and $1..$N with input
+// fields. Unknown $ sequences are kept as-is.
+func expandTemplate(out []byte, tpl string, fields [][]byte, diff []byte) []byte {
+	for i := 0; i < len(tpl); i++ {
+		if tpl[i] != '$' || i+1 >= len(tpl) {
+			out = append(out, tpl[i])
+			continue
+		}
+		if tpl[i+1] == 'd' {
+			out = append(out, diff...)
+			i++
+			continue
+		}
+		j := i + 1
+		for j < len(tpl) && tpl[j] >= '0' && tpl[j] <= '9' {
+			j++
+		}
+		if j > i+1 {
+			n := 0
+			for k := i + 1; k < j; k++ {
+				n = n*10 + int(tpl[k]-'0')
+			}
+			if n >= 1 && n <= len(fields) {
+				out = append(out, fields[n-1]...)
+			}
+			i = j - 1
+			continue
+		}
+		out = append(out, '$')
+	}
+	return out
+}
+
+// unescapeTemplate interprets common escape sequences in the template string.
+func unescapeTemplate(s string) string {
+	s = strings.ReplaceAll(s, "\\033", "\033")
+	s = strings.ReplaceAll(s, "\\e", "\033")
+	s = strings.ReplaceAll(s, "\\n", "\n")
+	s = strings.ReplaceAll(s, "\\t", "\t")
+	return s
 }
