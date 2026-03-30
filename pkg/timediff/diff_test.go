@@ -275,30 +275,7 @@ func TestDiffForHumansSkip(t *testing.T) {
 	}
 }
 
-func TestJoinParts(t *testing.T) {
-	tests := []struct {
-		name   string
-		parts  []string
-		expect string
-	}{
-		{"empty", nil, ""},
-		{"one", []string{"1 hour"}, "1 hour"},
-		{"two", []string{"1 hour", "30 minutes"}, "1 hour and 30 minutes"},
-		{"three", []string{"1 year", "2 months", "3 days"}, "1 year, 2 months, and 3 days"},
-		{"four", []string{"1y", "2mo", "3d", "4h"}, "1y, 2mo, 3d, and 4h"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := joinParts(tt.parts)
-			if got != tt.expect {
-				t.Errorf("joinParts() = %q, want %q", got, tt.expect)
-			}
-		})
-	}
-}
-
-func TestFormatUnit(t *testing.T) {
+func TestAppendUnit(t *testing.T) {
 	tests := []struct {
 		name    string
 		count   int
@@ -316,9 +293,10 @@ func TestFormatUnit(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := formatUnit(tt.count, tt.unitIdx, tt.short)
+			var buf [20]byte
+			got := string(appendUnit(buf[:0], tt.count, tt.unitIdx, tt.short))
 			if got != tt.expect {
-				t.Errorf("formatUnit() = %q, want %q", got, tt.expect)
+				t.Errorf("appendUnit() = %q, want %q", got, tt.expect)
 			}
 		})
 	}

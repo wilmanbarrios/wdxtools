@@ -91,11 +91,6 @@ func Diff(from, to time.Time) Interval {
 	weeks := days / 7
 	days = days % 7
 
-	// Suppress unused warnings for h1, min1, s1.
-	_ = h1
-	_ = min1
-	_ = s1
-
 	return Interval{
 		Years:   years,
 		Months:  months,

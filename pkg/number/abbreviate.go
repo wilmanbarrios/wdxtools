@@ -5,8 +5,6 @@
 // Laravel is created by Taylor Otwell and licensed under the MIT License.
 package number
 
-// No external imports needed — math.Log10/Pow replaced with tables and comparisons.
-
 // Option configures the behavior of Abbreviate and ForHumans.
 type Option func(*config)
 
@@ -47,27 +45,24 @@ var longSuffixes = [6]string{"", " thousand", " million", " billion", " trillion
 // Abbreviate formats a number into a short human-readable string.
 // Examples: 1000 → "1K", 1500000 → "2M", 489939 with MaxPrecision(2) → "489.94K"
 func Abbreviate(number float64, opts ...Option) string {
-	cfg := defaultConfig()
-	for _, o := range opts {
-		o(&cfg)
-	}
-	if number < 0 {
-		return "-" + summarize(-number, cfg.precision, cfg.maxPrecision, &shortSuffixes)
-	}
-	return summarize(number, cfg.precision, cfg.maxPrecision, &shortSuffixes)
+	return abbreviateWith(number, &shortSuffixes, opts...)
 }
 
 // ForHumans formats a number into a long human-readable string.
 // Examples: 1000 → "1 thousand", 1000000 → "1 million"
 func ForHumans(number float64, opts ...Option) string {
+	return abbreviateWith(number, &longSuffixes, opts...)
+}
+
+func abbreviateWith(number float64, units *[6]string, opts ...Option) string {
 	cfg := defaultConfig()
 	for _, o := range opts {
 		o(&cfg)
 	}
 	if number < 0 {
-		return "-" + summarize(-number, cfg.precision, cfg.maxPrecision, &longSuffixes)
+		return "-" + summarize(-number, cfg.precision, cfg.maxPrecision, units)
 	}
-	return summarize(number, cfg.precision, cfg.maxPrecision, &longSuffixes)
+	return summarize(number, cfg.precision, cfg.maxPrecision, units)
 }
 
 // summarize is the core formatting logic, ported from Laravel's Number::summarize().

@@ -90,7 +90,6 @@ func formatInterval(iv Interval, syntax Syntax, short bool, parts int, opts Opti
 	}
 	var result [7]collected
 	resultLen := 0
-	var lastUnit int
 
 	for i, v := range vals {
 		if v > 0 {
@@ -102,7 +101,6 @@ func formatInterval(iv Interval, syntax Syntax, short bool, parts int, opts Opti
 		if resultLen >= parts {
 			break
 		}
-		lastUnit = i
 	}
 
 	// Handle zero diff.
@@ -110,17 +108,13 @@ func formatInterval(iv Interval, syntax Syntax, short bool, parts int, opts Opti
 		if relativeToNow && opts&JustNow != 0 {
 			return "just now"
 		}
-		fallbackUnit := lastUnit
-		if fallbackUnit < int(UnitSecond) {
-			fallbackUnit = int(UnitSecond)
-		}
 		count := 0
 		if opts&NoZeroDiff != 0 {
 			count = 1
 		}
 		// Build: "{count} {unit}" + suffix in one buffer.
 		var buf [64]byte
-		b := appendUnit(buf[:0], count, fallbackUnit, short)
+		b := appendUnit(buf[:0], count, int(UnitSecond), short)
 		b = appendSuffix(b, iv.Invert, absolute, relativeToNow)
 		return string(b)
 	}
@@ -197,39 +191,6 @@ func appendSuffix(b []byte, invert, absolute, relativeToNow bool) []byte {
 		return append(b, " before"...)
 	}
 	return append(b, " after"...)
-}
-
-// joinParts joins formatted strings with Oxford comma style:
-// 1 part: "X", 2 parts: "X and Y", 3+: "X, Y, and Z".
-func joinParts(parts []string) string {
-	switch len(parts) {
-	case 0:
-		return ""
-	case 1:
-		return parts[0]
-	case 2:
-		return parts[0] + " and " + parts[1]
-	default:
-		var b []byte
-		for i, p := range parts {
-			if i > 0 {
-				if i == len(parts)-1 {
-					b = append(b, ", and "...)
-				} else {
-					b = append(b, ", "...)
-				}
-			}
-			b = append(b, p...)
-		}
-		return string(b)
-	}
-}
-
-// formatUnit formats a single count+unit pair. Used by tests.
-func formatUnit(count, unitIdx int, short bool) string {
-	var buf [20]byte
-	b := appendUnit(buf[:0], count, unitIdx, short)
-	return string(b)
 }
 
 // makeSkipSet converts a skip slice to a fixed-size boolean array for O(1) lookup.
