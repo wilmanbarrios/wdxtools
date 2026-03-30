@@ -5,8 +5,9 @@ build:
 	docker build --target builder -t wdxtools-builder .
 	docker create --name wdxtools-extract wdxtools-builder 2>/dev/null || true
 	docker cp wdxtools-extract:/out/numcrn ./bin/numcrn
+	docker cp wdxtools-extract:/out/diffh ./bin/diffh
 	docker rm wdxtools-extract
-	@echo "Built: ./bin/numcrn"
+	@echo "Built: ./bin/numcrn ./bin/diffh"
 
 test:
 	docker build --target tester -t wdxtools-tester .

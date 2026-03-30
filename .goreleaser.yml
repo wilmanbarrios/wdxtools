@@ -19,10 +19,37 @@ builds:
       - goos: windows
         goarch: arm64
 
+  - id: diffh
+    main: ./cmd/diffh
+    binary: diffh
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+
 archives:
   - id: numcrn
     builds:
       - numcrn
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+    name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+  - id: diffh
+    builds:
+      - diffh
     format: tar.gz
     format_overrides:
       - goos: windows
@@ -56,3 +83,19 @@ brews:
       bin.install "numcrn"
     test: |
       assert_equal "1K", shell_output("#{bin}/numcrn 1000").strip
+
+  - name: diffh
+    ids:
+      - diffh
+    repository:
+      owner: wilmanbarrios
+      name: homebrew-wdxtools
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/wilmanbarrios/wdxtools"
+    description: "Human-readable time differences (port of Carbon diffForHumans)"
+    license: "MIT"
+    install: |
+      bin.install "diffh"
+    test: |
+      assert_match "ago", shell_output("#{bin}/diffh 2000-01-01").strip

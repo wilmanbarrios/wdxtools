@@ -5,6 +5,7 @@ COPY go.mod ./
 COPY . .
 
 RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/numcrn ./cmd/numcrn
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/diffh ./cmd/diffh
 
 FROM builder AS tester
 RUN go test ./... -v
@@ -14,4 +15,4 @@ RUN go test ./... -bench=. -benchmem
 
 FROM scratch AS runtime
 COPY --from=builder /out/numcrn /numcrn
-ENTRYPOINT ["/numcrn"]
+COPY --from=builder /out/diffh /diffh
