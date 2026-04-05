@@ -8,7 +8,7 @@ Everyday formatting tools for the command line. Lightning-fast Go ports of popul
 ## Install
 
 ```bash
-brew install wilmanbarrios/wdxtools/wdxtools
+brew install wilmanbarrios/tap/wdxtools
 # or
 go install github.com/wilmanbarrios/wdxtools/cmd/wdxtools@latest
 ```

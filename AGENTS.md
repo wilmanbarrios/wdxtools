@@ -24,7 +24,7 @@ Everyday formatting tools for the command line. Lightning-fast Go ports of popul
 
 ## Distribution
 - GoReleaser + GitHub Actions on tag push (v*)
-- Homebrew tap: wilmanbarrios/homebrew-wdxtools (with symlinks per subcommand)
+- Homebrew tap: wilmanbarrios/homebrew-tap (with symlinks per subcommand)
 - go install support: `go install github.com/wilmanbarrios/wdxtools/cmd/wdxtools@latest`
 
 ## Testing

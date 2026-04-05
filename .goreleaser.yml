@@ -46,7 +46,7 @@ brews:
       - wdxtools
     repository:
       owner: wilmanbarrios
-      name: homebrew-wdxtools
+      name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     directory: Formula
     homepage: "https://github.com/wilmanbarrios/wdxtools"
