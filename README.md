@@ -3,14 +3,22 @@
 [![CI](https://github.com/wilmanbarrios/wdxtools/actions/workflows/ci.yml/badge.svg)](https://github.com/wilmanbarrios/wdxtools/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Everyday formatting tools for the command line. Lightning-fast Go ports of popular library functions that deserve their own binary.
+Everyday formatting tools for the command line. Lightning-fast Go ports of popular library functions.
+
+## Install
+
+```bash
+brew install wilmanbarrios/wdxtools/wdxtools
+# or
+go install github.com/wilmanbarrios/wdxtools/cmd/wdxtools@latest
+```
 
 ## Utilities
 
-| Tool | Description | Ported from |
-|------|-------------|-------------|
-| [`numcrn`](#numcrn) | Abbreviate numbers for humans | Laravel `Number::abbreviate()` |
-| [`diffh`](#diffh) | Human-readable time differences | Carbon `diffForHumans()` |
+| Command | Description | Ported from |
+|---------|-------------|-------------|
+| [`wdxtools numcrn`](#numcrn) | Abbreviate numbers for humans | Laravel `Number::abbreviate()` |
+| [`wdxtools diffh`](#diffh) | Human-readable time differences | Carbon `diffForHumans()` |
 
 ---
 
@@ -18,26 +26,18 @@ Everyday formatting tools for the command line. Lightning-fast Go ports of popul
 
 Abbreviate numbers for humans. Port of [Laravel's `Number::abbreviate()`](https://github.com/laravel/framework/blob/12.x/src/Illuminate/Support/Number.php) with 100% feature parity.
 
-### Install
-
-```bash
-brew install wilmanbarrios/wdxtools/numcrn
-# or
-go install github.com/wilmanbarrios/wdxtools/cmd/numcrn@latest
-```
-
 ### Examples
 
 ```bash
-numcrn 489939              # 490K
-numcrn -m 2 489939         # 489.94K
-numcrn -p 2 1000000        # 1.00M
-numcrn -l 1000000          # 1 million
-echo -1000 | numcrn        # -1K
-numcrn 1000000000000000000 # 1KQ
+wdxtools numcrn 489939              # 490K
+wdxtools numcrn -m 2 489939         # 489.94K
+wdxtools numcrn -p 2 1000000        # 1.00M
+wdxtools numcrn -l 1000000          # 1 million
+echo -1000 | wdxtools numcrn        # -1K
+wdxtools numcrn 1000000000000000000 # 1KQ
 ```
 
-Run `numcrn --help` for all flags.
+Run `wdxtools numcrn --help` for all flags.
 
 ### Original vs wdxtools
 
@@ -53,7 +53,7 @@ Run `numcrn --help` for all flags.
 | Runtime | PHP 8.x + Laravel | Static binary |
 | Install | `composer require laravel/framework` | `brew install` / single binary |
 | Dependencies | Laravel + intl extension | None (stdlib only) |
-| Pipe support | No | Yes (`echo 1000 \| numcrn`) |
+| Pipe support | No | Yes (`echo 1000 \| wdxtools numcrn`) |
 
 ---
 
@@ -61,31 +61,23 @@ Run `numcrn --help` for all flags.
 
 Human-readable time differences. Port of [Carbon's `diffForHumans()`](https://github.com/briannesbitt/Carbon/blob/master/src/Carbon/Traits/Difference.php) with 100% feature parity.
 
-### Install
-
-```bash
-brew install wilmanbarrios/wdxtools/diffh
-# or
-go install github.com/wilmanbarrios/wdxtools/cmd/diffh@latest
-```
-
 ### Examples
 
 ```bash
-diffh 2024-01-15                    # 1 year ago
-diffh -s 2024-01-15                 # 1y ago
-diffh -p 3 2024-01-15              # 1 year, 2 months, and 14 days ago
-diffh -a 2024-01-15 2025-01-15     # 1 year
-diffh 1774820647                    # 4 hours ago (unix timestamp)
-echo 2024-01-15 | diffh            # 1 year ago
+wdxtools diffh 2024-01-15                    # 1 year ago
+wdxtools diffh -s 2024-01-15                 # 1y ago
+wdxtools diffh -p 3 2024-01-15              # 1 year, 2 months, and 14 days ago
+wdxtools diffh -a 2024-01-15 2025-01-15     # 1 year
+wdxtools diffh 1774820647                    # 4 hours ago (unix timestamp)
+echo 2024-01-15 | wdxtools diffh            # 1 year ago
 
 # Batch mode with templates (-f)
-printf '%s\n' ts1 ts2 | diffh               # one line per input
-cat log.csv | diffh -f '$2 ($d)'            # $1..$N=fields, $d=diff
-cat events.tsv | diffh -f '$1\t$2\t$d'      # tab-separated output
+printf '%s\n' ts1 ts2 | wdxtools diffh               # one line per input
+cat log.csv | wdxtools diffh -f '$2 ($d)'            # $1..$N=fields, $d=diff
+cat events.tsv | wdxtools diffh -f '$1\t$2\t$d'      # tab-separated output
 ```
 
-Run `diffh --help` for all flags.
+Run `wdxtools diffh --help` for all flags.
 
 ### Original vs wdxtools
 
@@ -100,8 +92,14 @@ Run `diffh --help` for all flags.
 | Runtime | PHP 8.x + Carbon | Static binary |
 | Install | `composer require nesbot/carbon` | `brew install` / single binary |
 | Dependencies | Carbon + intl extension | None (stdlib only) |
-| Unix timestamps | No | Yes (`diffh 1774820647`) |
-| Pipe support | No | Yes (`echo date \| diffh`) |
+| Unix timestamps | No | Yes (`wdxtools diffh 1774820647`) |
+| Pipe support | No | Yes (`echo date \| wdxtools diffh`) |
+
+---
+
+## Backward compatibility
+
+Homebrew installs symlinks for each subcommand, so `diffh 2024-01-15` and `numcrn 1000` continue to work as standalone commands.
 
 ---
 
@@ -129,7 +127,7 @@ Reproduce locally: `make bench` (Go) and `make bench-php` (PHP).
 All builds run via Docker — no Go toolchain required on host.
 
 ```bash
-make build        # builds all binaries to ./bin/
+make build        # builds binary to ./bin/wdxtools
 make test         # runs all tests
 make bench        # runs benchmarks
 ```

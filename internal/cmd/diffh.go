@@ -1,14 +1,11 @@
-// diffh — human-readable time differences.
-//
 // Port of Carbon's CarbonInterface::diffForHumans().
 // Original: https://github.com/briannesbitt/Carbon/blob/master/src/Carbon/Traits/Difference.php
 // Carbon is created by Brian Nesbitt and licensed under the MIT License.
-package main
+package cmd
 
 import (
 	"bufio"
 	"bytes"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -16,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/cobra"
 	"github.com/wilmanbarrios/wdxtools/pkg/timediff"
 )
 
@@ -28,80 +26,80 @@ var dateFormats = []string{
 	"2006-01-02",
 }
 
-// version is set at build time via -ldflags.
-var version = "dev"
+var diffhCmd = &cobra.Command{
+	Use:   "diffh [flags] <date> [other-date]",
+	Short: "Human-readable time differences",
+	Long:  "Human-readable time differences (port of Carbon diffForHumans).",
+	Example: `  wdxtools diffh 2024-01-15              # 1 year ago
+  wdxtools diffh -s 2024-01-15            # 1y ago
+  wdxtools diffh -p 3 2024-01-15          # 1 year, 2 months, and 14 days ago
+  wdxtools diffh -a 2024-01-15 2025-01-15 # 1 year
+  wdxtools diffh 1774820647               # 4 hours ago (unix timestamp)
+  echo 2024-01-15 | wdxtools diffh        # 1 year ago (stdin)
+  printf '%s\n' ts1 ts2 | wdxtools diffh  # one line per input (batch mode)
 
-func main() {
-	versionFlag := flag.Bool("v", false, "print version and exit")
-	flag.BoolVar(versionFlag, "version", false, "print version and exit")
+Template mode (-f): $1..$N = input fields, $d = time diff
+  ... | wdxtools diffh -f '$2 ($d)'       # second field + diff in parens
+  ... | wdxtools diffh -f '$1\t$d'        # first field + tab + diff`,
+	Args:         cobra.ArbitraryArgs,
+	SilenceUsage: true,
+	RunE:         runDiffh,
+}
 
-	short := flag.Bool("s", false, "use short form (2h, 3d, ...)")
-	flag.BoolVar(short, "short", false, "use short form (2h, 3d, ...)")
+func init() {
+	f := diffhCmd.Flags()
+	f.BoolP("short", "s", false, "use short form (2h, 3d, ...)")
+	f.BoolP("absolute", "a", false, "absolute mode (no ago/from now)")
+	f.IntP("parts", "p", 1, "time units to show (1-7)")
+	f.BoolP("just-now", "j", false, `show "just now" for zero diffs`)
+	f.Bool("one-day", false, "use yesterday/tomorrow for 1-day diffs")
+	f.Bool("two-day", false, `use "before yesterday"/"after tomorrow"`)
+	f.BoolP("sequential", "S", false, "only show sequential non-zero units")
+	f.BoolP("no-zero", "n", false, `show "1 second" instead of "0 seconds"`)
+	f.StringP("format", "f", "", "output template for batch mode ($1..$N=fields, $d=diff)")
 
-	absolute := flag.Bool("a", false, "absolute mode (no ago/from now)")
-	flag.BoolVar(absolute, "absolute", false, "absolute mode (no ago/from now)")
+	rootCmd.AddCommand(diffhCmd)
+}
 
-	parts := flag.Int("p", 1, "time units to show (1-7)")
-	flag.IntVar(parts, "parts", 1, "time units to show (1-7)")
-
-	justNow := flag.Bool("j", false, "show \"just now\" for zero diffs")
-	flag.BoolVar(justNow, "just-now", false, "show \"just now\" for zero diffs")
-
-	oneDay := flag.Bool("1", false, "use yesterday/tomorrow for 1-day diffs")
-	flag.BoolVar(oneDay, "one-day", false, "use yesterday/tomorrow for 1-day diffs")
-
-	twoDay := flag.Bool("2", false, "use \"before yesterday\"/\"after tomorrow\"")
-	flag.BoolVar(twoDay, "two-day", false, "use \"before yesterday\"/\"after tomorrow\"")
-
-	sequential := flag.Bool("S", false, "only show sequential non-zero units")
-	flag.BoolVar(sequential, "sequential", false, "only show sequential non-zero units")
-
-	noZero := flag.Bool("n", false, "show \"1 second\" instead of \"0 seconds\"")
-	flag.BoolVar(noZero, "no-zero", false, "show \"1 second\" instead of \"0 seconds\"")
-
-	formatTpl := flag.String("f", "", "output template for batch mode ($1..$N=fields, $d=diff)")
-	flag.StringVar(formatTpl, "format", "", "output template for batch mode ($1..$N=fields, $d=diff)")
-
-	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: diffh [flags] <date> [other-date]\n\nHuman-readable time differences.\n\nFlags:\n")
-		flag.PrintDefaults()
-		fmt.Fprintf(os.Stderr, "\nExamples:\n  diffh 2024-01-15              → 1 year ago\n  diffh -s 2024-01-15            → 1y ago\n  diffh -p 3 2024-01-15          → 1 year, 2 months, and 14 days ago\n  diffh -a 2024-01-15 2025-01-15 → 1 year\n  diffh 1774820647               → 4 hours ago (unix timestamp)\n  echo 2024-01-15 | diffh        → 1 year ago\n  printf '%%s\\n' ts1 ts2 | diffh  → one line per input (batch mode)\n\nTemplate mode (-f): $1..$N = input fields, $d = time diff\n  ... | diffh -f '$2 ($d)'       → second field + diff in parens\n  ... | diffh -f '$1\\t$d'        → first field + tab + diff\n  ... | diffh -f '$d — $1 $2'    → diff followed by two fields\n")
-	}
-
-	flag.Parse()
-
-	if *versionFlag {
-		fmt.Println("diffh " + version)
-		return
-	}
+func runDiffh(cmd *cobra.Command, args []string) error {
+	f := cmd.Flags()
+	short, _ := f.GetBool("short")
+	absolute, _ := f.GetBool("absolute")
+	parts, _ := f.GetInt("parts")
+	justNow, _ := f.GetBool("just-now")
+	oneDay, _ := f.GetBool("one-day")
+	twoDay, _ := f.GetBool("two-day")
+	sequential, _ := f.GetBool("sequential")
+	noZero, _ := f.GetBool("no-zero")
+	formatTpl, _ := f.GetString("format")
 
 	// Build options.
 	var opts []timediff.Option
 
-	if *short {
+	if short {
 		opts = append(opts, timediff.WithShort(true))
 	}
-	if *absolute {
+	if absolute {
 		opts = append(opts, timediff.WithSyntax(timediff.SyntaxAbsolute))
 	}
-	if *parts != 1 {
-		opts = append(opts, timediff.WithParts(*parts))
+	if parts != 1 {
+		opts = append(opts, timediff.WithParts(parts))
 	}
 
 	var optFlags timediff.Options
-	if *justNow {
+	if justNow {
 		optFlags |= timediff.JustNow
 	}
-	if *oneDay {
+	if oneDay {
 		optFlags |= timediff.OneDayWords
 	}
-	if *twoDay {
+	if twoDay {
 		optFlags |= timediff.TwoDayWords
 	}
-	if *sequential {
+	if sequential {
 		optFlags |= timediff.SequentialPartsOnly
 	}
-	if *noZero {
+	if noZero {
 		optFlags |= timediff.NoZeroDiff
 	}
 	if optFlags != 0 {
@@ -110,20 +108,17 @@ func main() {
 
 	w := bufio.NewWriterSize(os.Stdout, 32768)
 
-	args := flag.Args()
 	if len(args) > 0 {
 		from, err := parseDate(args[0])
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "diffh: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("diffh: %w", err)
 		}
 
 		// Optional second positional argument as "other" date.
 		if len(args) >= 2 {
 			other, err := parseDate(args[1])
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "diffh: %v\n", err)
-				os.Exit(1)
+				return fmt.Errorf("diffh: %w", err)
 			}
 			opts = append(opts, timediff.WithOther(other))
 		}
@@ -132,18 +127,18 @@ func main() {
 		io.WriteString(w, result)
 		io.WriteString(w, "\n")
 		w.Flush()
-		return
+		return nil
 	}
 
 	// Check stdin.
 	stat, _ := os.Stdin.Stat()
 	if (stat.Mode() & os.ModeCharDevice) == 0 {
-		f := timediff.NewFormatter(opts...)
+		fmtr := timediff.NewFormatter(opts...)
 		var buf [128]byte
 		scanner := bufio.NewScanner(os.Stdin)
 
-		if *formatTpl != "" {
-			tpl := unescapeTemplate(*formatTpl)
+		if formatTpl != "" {
+			tpl := unescapeTemplate(formatTpl)
 			var tplBuf [256]byte
 			for scanner.Scan() {
 				var fields [16][]byte
@@ -157,7 +152,7 @@ func main() {
 					fmt.Fprintf(os.Stderr, "diffh: %v\n", err)
 					os.Exit(1)
 				}
-				diff := f.AppendFormat(buf[:0], from)
+				diff := fmtr.AppendFormat(buf[:0], from)
 				out := expandTemplate(tplBuf[:0], tpl, fields[:nf], diff)
 				w.Write(out)
 				w.WriteByte('\n')
@@ -174,7 +169,7 @@ func main() {
 					fmt.Fprintf(os.Stderr, "diffh: %v\n", err)
 					os.Exit(1)
 				}
-				b := f.AppendFormat(buf[:0], from)
+				b := fmtr.AppendFormat(buf[:0], from)
 				b = append(b, '\n')
 				w.Write(b)
 			}
@@ -186,11 +181,10 @@ func main() {
 			os.Exit(1)
 		}
 		w.Flush()
-		return
+		return nil
 	}
 
-	flag.Usage()
-	os.Exit(1)
+	return cmd.Help()
 }
 
 // parseDateBytes tries to interpret b as a date/time without string allocation

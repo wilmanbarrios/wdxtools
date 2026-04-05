@@ -1,32 +1,31 @@
 # wdxtools
 
-Everyday formatting tools for the command line. Lightning-fast Go ports of popular library functions that deserve their own binary.
+Everyday formatting tools for the command line. Lightning-fast Go ports of popular library functions.
 
 ## Project principles
 - Performance first: use strconv over fmt, pre-computed tables, minimize allocations
 - 100% feature parity with source implementations
-- Zero external dependencies (stdlib only)
+- Zero external dependencies in `pkg/` libraries (stdlib only)
+- CLI layer uses cobra for robust subcommand handling
 - All builds via Docker (no Go required on host)
-- Each utility is independent: own cmd/ entry + own pkg/ library
 - Credit original authors in source headers and README
 
 ## Structure
-- `cmd/<name>/main.go` — CLI entry point per utility
-- `pkg/<domain>/` — reusable library per utility
-- Dockerfile: multi-stage (builder, tester, runtime)
+- `cmd/wdxtools/main.go` — single binary entry point (busybox pattern for backward compat)
+- `internal/cmd/` — cobra command definitions (one file per subcommand)
+- `pkg/<domain>/` — reusable library per utility (stdlib only, no CLI dependencies)
+- Dockerfile: multi-stage (builder, runtime)
 - Makefile: `build`, `test`, `bench` targets (all via Docker)
 
 ## Adding a new utility
-1. Create `cmd/<name>/main.go`
-2. Create `pkg/<domain>/` with library + tests
-3. Add build target to Dockerfile and Makefile
-4. Add binary to `.goreleaser.yml`
-5. Update README.md
+1. Create `pkg/<domain>/` with library + tests
+2. Create `internal/cmd/<name>.go` with cobra command (register via `init()`)
+3. Update README.md
 
 ## Distribution
 - GoReleaser + GitHub Actions on tag push (v*)
-- Homebrew tap: wilmanbarrios/homebrew-wdxtools
-- go install support
+- Homebrew tap: wilmanbarrios/homebrew-wdxtools (with symlinks per subcommand)
+- go install support: `go install github.com/wilmanbarrios/wdxtools/cmd/wdxtools@latest`
 
 ## Testing
 - `make test` — runs all tests via Docker
