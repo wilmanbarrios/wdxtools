@@ -10,10 +10,12 @@ build:
 	@echo "Built: ./bin/numcrn ./bin/diffh"
 
 test:
-	docker build --target tester -t wdxtools-tester .
+	@docker build --target builder -t wdxtools-builder -q .
+	@docker run --rm wdxtools-builder go test ./... -v
 
 bench:
-	docker build --target bencher -t wdxtools-bencher .
+	@docker build --target builder -t wdxtools-builder -q .
+	@docker run --rm wdxtools-builder go test ./... -bench=. -benchmem
 
 bench-php:
 	docker build -t wdxtools-php-bench bench/php/
