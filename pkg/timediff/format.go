@@ -56,8 +56,15 @@ func DiffForHumans(from time.Time, opts ...Option) string {
 		}
 	}
 
+	return DiffForHumansWith(from, to, syntax, cfg.short, cfg.parts, cfg.options, cfg.skip)
+}
+
+// DiffForHumansWith is the direct-call variant of DiffForHumans. It accepts
+// all parameters explicitly, avoiding the functional-options overhead (heap
+// escapes from closures). Use this on hot paths where allocations matter.
+func DiffForHumansWith(from, to time.Time, syntax Syntax, short bool, parts int, opts Options, skip []Unit) string {
 	iv := Diff(from, to)
-	return formatInterval(iv, syntax, cfg.short, cfg.parts, cfg.options, cfg.skip)
+	return formatInterval(iv, syntax, short, parts, opts, skip)
 }
 
 // formatInterval is the core formatting engine (mirrors CarbonInterval::forHumans).

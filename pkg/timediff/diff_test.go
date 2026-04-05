@@ -408,6 +408,30 @@ func BenchmarkFormatterAppend(b *testing.B) {
 	}
 }
 
+func BenchmarkDiffForHumansWith(b *testing.B) {
+	from := fixed(2024, 6, 15, 10, 30, 0)
+	now := fixed(2025, 3, 29, 12, 0, 0)
+	for i := 0; i < b.N; i++ {
+		DiffForHumansWith(from, now, SyntaxRelativeToNow, false, 1, 0, nil)
+	}
+}
+
+func BenchmarkDiffForHumansWithMultiPart(b *testing.B) {
+	from := fixed(2024, 1, 15, 10, 30, 0)
+	now := fixed(2025, 3, 29, 12, 0, 0)
+	for i := 0; i < b.N; i++ {
+		DiffForHumansWith(from, now, SyntaxRelativeToNow, false, 3, 0, nil)
+	}
+}
+
+func BenchmarkDiffIntervalUTC(b *testing.B) {
+	from := fixed(2024, 1, 15, 10, 30, 0).UTC()
+	to := fixed(2025, 3, 29, 12, 0, 0).UTC()
+	for i := 0; i < b.N; i++ {
+		Diff(from, to)
+	}
+}
+
 // Fuzz test
 
 func FuzzDiffForHumans(f *testing.F) {

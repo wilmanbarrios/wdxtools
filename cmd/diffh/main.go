@@ -108,7 +108,7 @@ func main() {
 		opts = append(opts, timediff.WithOptions(optFlags))
 	}
 
-	w := bufio.NewWriter(os.Stdout)
+	w := bufio.NewWriterSize(os.Stdout, 32768)
 
 	args := flag.Args()
 	if len(args) > 0 {
@@ -146,8 +146,9 @@ func main() {
 			tpl := unescapeTemplate(*formatTpl)
 			var tplBuf [256]byte
 			for scanner.Scan() {
-				fields := bytes.Fields(scanner.Bytes())
-				if len(fields) == 0 {
+				var fields [16][]byte
+				nf := splitFields(scanner.Bytes(), &fields)
+				if nf == 0 {
 					continue
 				}
 				from, err := parseDateBytes(fields[0])
@@ -157,7 +158,7 @@ func main() {
 					os.Exit(1)
 				}
 				diff := f.AppendFormat(buf[:0], from)
-				out := expandTemplate(tplBuf[:0], tpl, fields, diff)
+				out := expandTemplate(tplBuf[:0], tpl, fields[:nf], diff)
 				w.Write(out)
 				w.WriteByte('\n')
 			}
@@ -196,9 +197,9 @@ func main() {
 // for the common case of Unix timestamps (pure integers).
 func parseDateBytes(b []byte) (time.Time, error) {
 	if ts, ok := parseIntBytes(b); ok {
-		return time.Unix(ts, 0), nil
+		return time.Unix(ts, 0).UTC(), nil
 	}
-	return parseDate(string(b))
+	return parseDateFormat(string(b))
 }
 
 // parseIntBytes parses a decimal integer from b without allocating a string.
@@ -229,16 +230,55 @@ func parseIntBytes(b []byte) (int64, bool) {
 }
 
 // parseDate tries to interpret s as a date/time. It checks for Unix timestamps
-// first (pure integers), then tries common date formats.
+// first (pure integers), then tries common date formats. Used for CLI arguments
+// where input hasn't been pre-validated.
 func parseDate(s string) (time.Time, error) {
 	s = strings.TrimSpace(s)
 
 	// Try Unix timestamp (pure integer).
 	if ts, err := strconv.ParseInt(s, 10, 64); err == nil {
-		return time.Unix(ts, 0), nil
+		return time.Unix(ts, 0).UTC(), nil
 	}
 
-	// Try known date formats.
+	return parseDateFormat(s)
+}
+
+// parseDateFormat parses a date string using a length+character discriminator
+// to select the correct format on the first try, avoiding failed time.Parse
+// attempts that allocate internally.
+func parseDateFormat(s string) (time.Time, error) {
+	n := len(s)
+
+	// "2006-01-02" (10 chars)
+	if n == 10 {
+		if t, err := time.Parse("2006-01-02", s); err == nil {
+			return t, nil
+		}
+	}
+
+	// Longer formats share the "2006-01-02" prefix; discriminate on s[10].
+	if n > 10 {
+		switch s[10] {
+		case 'T':
+			// RFC3339 variants: "2006-01-02T15:04:05Z07:00" or "2006-01-02T15:04:05"
+			if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
+				return t, nil
+			}
+			if t, err := time.Parse(time.RFC3339, s); err == nil {
+				return t, nil
+			}
+			if t, err := time.Parse("2006-01-02T15:04:05", s); err == nil {
+				return t, nil
+			}
+		case ' ':
+			// "2006-01-02 15:04:05"
+			if t, err := time.Parse("2006-01-02 15:04:05", s); err == nil {
+				return t, nil
+			}
+		}
+	}
+
+	// Fallback: try all formats for unexpected inputs.
 	for _, layout := range dateFormats {
 		if t, err := time.Parse(layout, s); err == nil {
 			return t, nil
@@ -246,6 +286,30 @@ func parseDate(s string) (time.Time, error) {
 	}
 
 	return time.Time{}, fmt.Errorf("invalid date: %q", s)
+}
+
+// splitFields splits b on whitespace into the caller-supplied array, returning
+// the number of fields found. No heap allocation.
+func splitFields(b []byte, dst *[16][]byte) int {
+	n := 0
+	i := 0
+	for i < len(b) && n < len(dst) {
+		// Skip whitespace.
+		for i < len(b) && (b[i] == ' ' || b[i] == '\t') {
+			i++
+		}
+		if i >= len(b) {
+			break
+		}
+		// Start of field.
+		start := i
+		for i < len(b) && b[i] != ' ' && b[i] != '\t' {
+			i++
+		}
+		dst[n] = b[start:i]
+		n++
+	}
+	return n
 }
 
 // expandTemplate replaces $d with the formatted diff, and $1..$N with input
